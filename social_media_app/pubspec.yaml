@@ -44,6 +44,10 @@ dependencies:
   # --- API & NETWORKING ---
   http: ^1.2.0
   google_generative_ai: ^0.4.0
+  shared_preferences: ^2.5.4
+  firebase_core: ^4.5.0
+  cloud_firestore: ^6.1.3
+  firebase_auth: ^6.2.0
 
 # Dev-only packages (tools used during development)
 dev_dependencies:
@@ -71,7 +75,7 @@ flutter:
 
   # Assets folder (images, splash logo, etc.)
   assets:
-    - assets/images/   # Folder ng splash logo at iba pang images
+    - assets/images/
 
 # Splash screen configuration (hiwalay sa flutter:)
 flutter_native_splash:

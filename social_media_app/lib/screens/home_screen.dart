@@ -10,6 +10,8 @@ import 'marketplace_screen.dart';
 import 'messages_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
+// Make sure to import your login screen here
+import 'login_screen.dart';
 
 // 1. MAIN NAVIGATION WRAPPER
 // This widget handles the primary scaffold and the bottom navigation switching logic
@@ -381,6 +383,18 @@ class _HomeFeedViewState extends State<_HomeFeedView> {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Image.asset('assets/images/messenger_logo.png', height: 35, width: 50),
             ),
+          ),
+          // --- LOGOUT BUTTON ADDED HERE ---
+          IconButton(
+            onPressed: () {
+              // Navigates back to LoginScreen and removes all previous routes
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                    (route) => false,
+              );
+            },
+            icon: const Icon(Icons.logout, color: Colors.black, size: 28),
           ),
         ],
       ),

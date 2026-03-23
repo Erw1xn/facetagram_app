@@ -1,43 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-// --- CHAT DETAIL SCREEN: Handles individual conversation threads ---
 class ChatDetailScreen extends StatefulWidget {
   final String name;
   final String profileImg;
+  final String receiverId;
 
-  // Constructor requires the recipient's name and image URL
-  const ChatDetailScreen({super.key, required this.name, required this.profileImg});
+  const ChatDetailScreen({super.key, required this.name, required this.profileImg, required this.receiverId});
 
   @override
   State<ChatDetailScreen> createState() => _ChatDetailScreenState();
 }
 
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
-  // 1. Controller to clear the text field after sending and access the input text
   final TextEditingController _controller = TextEditingController();
+  final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  // 2. A dynamic list to store messages.
-  // Each entry is a Map. "isMe: true" identifies messages sent by the current user.
-  final List<Map<String, dynamic>> _messages = [
-    {"text": "Hey! Did you see the new post?", "isMe": false},
-    {"text": "Yeah! The hiking photos looked amazing. 🌲", "isMe": true},
-    {"text": "We should go there next weekend!", "isMe": false},
-    {"text": "I'm down! Let's invite Alex too.", "isMe": true},
-  ];
+  String getChatRoomId() {
+    List<String> ids = [currentUserId, widget.receiverId];
+    ids.sort();
+    return ids.join("_");
+  }
 
-  // 3. The Send Function: Validates input, updates state, and clears the field
-  void _sendMessage() {
-    // Only proceed if the text isn't just empty spaces
-    if (_controller.text.trim().isNotEmpty) {
-      setState(() {
-        // Adds the new message to the local list
-        _messages.add({
-          "text": _controller.text.trim(),
-          "isMe": true, // User-sent messages are always true
-        });
-      });
-      _controller.clear(); // Resets the input field to empty
-    }
+  void _sendMessage() async {
+    if (_controller.text.trim().isEmpty) return;
+    String messageText = _controller.text.trim();
+    _controller.clear();
+    final roomId = getChatRoomId();
+
+    // 1. KUNIN ANG DATA MO MULA SA 'USERS' COLLECTION
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .get();
+
+    String myName = userDoc.data()?['name'] ?? 'User';
+    String myProfilePic = userDoc.data()?['profilePicUrl'] ?? '';
+
+    // 2. I-save ang message sa conversation
+    await FirebaseFirestore.instance.collection('chats').doc(roomId).collection('messages').add({
+      'senderId': currentUserId,
+      'text': messageText,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // 3. I-update ang main chat document (Inbox list)
+    await FirebaseFirestore.instance.collection('chats').doc(roomId).set({
+      'lastMessage': messageText,
+      'lastTime': FieldValue.serverTimestamp(),
+      'users': [currentUserId, widget.receiverId],
+    }, SetOptions(merge: true));
+
+    // 4. DYNAMIC NOTIFICATION: Nilagyan ng 'receiverId'
+    await FirebaseFirestore.instance.collection('notifications').add({
+      'senderId': currentUserId,           // IKAW ang nag-send
+      'receiverId': widget.receiverId,     // SIYA ang makakatanggap (Dynamic ito!)
+      'username': myName,                  // Pangalan mo (na makikita NIYA)
+      'action': 'sent you a message 💬',
+      'imageUrl': myProfilePic,
+      'timestamp': FieldValue.serverTimestamp(),
+      'hasStory': false,
+    });
   }
 
   @override
@@ -47,107 +71,94 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0.5,
-        iconTheme: const IconThemeData(color: Colors.blue),
-        // Title Row: Displays Profile Pic, Name, and Status
         title: Row(
           children: [
             CircleAvatar(radius: 18, backgroundImage: NetworkImage(widget.profileImg)),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(widget.name,
-                    style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold)),
-                const Text("Active now",
-                    style: TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
-            ),
+            Text(widget.name, style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        actions: const [],
       ),
       body: Column(
         children: [
-          // 4. Using ListView.builder for performance and dynamic updates.
-          // Expanded ensures the list takes up all available space above the input bar.
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                // Returns a styled bubble for each message in the list
-                return _buildMessageBubble(
-                  _messages[index]["text"],
-                  _messages[index]["isMe"],
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('chats')
+                  .doc(getChatRoomId())
+                  .collection('messages')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final docs = snapshot.data!.docs;
+                return ListView.builder(
+                  reverse: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+
+                    String time = "";
+                    if (data['timestamp'] != null) {
+                      DateTime date = (data['timestamp'] as Timestamp).toDate();
+                      time = "${date.hour}:${date.minute.toString().padLeft(2, '0')}";
+                    }
+
+                    return _buildMessageBubble(data['text'], data['senderId'] == currentUserId, time);
+                  },
                 );
               },
             ),
           ),
-          // Persistent input bar at the bottom of the screen
-          _buildMinimalInputBar(),
+          _buildInputBar(),
         ],
       ),
     );
   }
 
-  // UI Helper: Builds the individual message bubbles
-  Widget _buildMessageBubble(String text, bool isMe) {
-    return Align(
-      // Sent messages go Right, received messages go Left
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 5),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          // Blue for user, light grey for others
-          color: isMe ? Colors.blue : Colors.grey[200],
-          borderRadius: BorderRadius.circular(20),
+  Widget _buildMessageBubble(String text, bool isMe, String time) {
+    return Column(
+      crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.only(top: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: isMe ? Colors.blue : Colors.grey[200],
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.black, fontSize: 16)),
+          ),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-              color: isMe ? Colors.white : Colors.black, fontSize: 16),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8.0, top: 2),
+          child: Text(time, style: const TextStyle(fontSize: 10, color: Colors.grey)),
         ),
-      ),
+      ],
     );
   }
 
-  // UI Helper: Builds the text input area and send button
-  Widget _buildMinimalInputBar() {
+  Widget _buildInputBar() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey[300]!, width: 0.5)),
-      ),
+      decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey[300]!, width: 0.5))),
       child: Row(
         children: [
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(25),
-              ),
+              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(25)),
               child: TextField(
-                controller: _controller, // Link the controller to the field
-                onSubmitted: (_) => _sendMessage(), // Allows sending via keyboard "Enter" key
-                decoration: const InputDecoration(
-                  hintText: "Type a message...",
-                  border: InputBorder.none,
-                ),
+                controller: _controller,
+                onSubmitted: (_) => _sendMessage(),
+                decoration: const InputDecoration(hintText: "Type a message...", border: InputBorder.none),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          // Action button to trigger the send logic
-          IconButton(
-            icon: const Icon(Icons.send, color: Colors.blue),
-            onPressed: _sendMessage,
-          ),
+          IconButton(icon: const Icon(Icons.send, color: Colors.blue), onPressed: _sendMessage),
         ],
       ),
     );

@@ -4,8 +4,16 @@ import '../models/post_model.dart';
 // --- POST CARD: A dynamic widget that handles both standard images and news-style posts ---
 class PostCard extends StatefulWidget {
   final Post post;
+  // ADDED: New parameters to receive YOUR current profile data
+  final String currentUserName;
+  final String currentUserProfilePic;
 
-  const PostCard({super.key, required this.post});
+  const PostCard({
+    super.key,
+    required this.post,
+    required this.currentUserName, // Required to show your name in comments
+    required this.currentUserProfilePic, // Required to show your pic in comments
+  });
 
   @override
   State<PostCard> createState() => _PostCardState();
@@ -13,18 +21,13 @@ class PostCard extends StatefulWidget {
 
 class _PostCardState extends State<PostCard> {
   // --- UI State Management ---
-  // Tracks whether the current user has liked the post
   bool _isLiked = false;
-  // Tracks whether the post is saved/bookmarked
   bool _isSaved = false;
-  // Tracks the follow status for the post author
   bool _isFollowing = true;
-  // Numerical storage for likes to allow for real-time increment/decrement
   late int _likesCount;
-  // Controller to handle text input in the comment bottom sheet
   final TextEditingController _commentController = TextEditingController();
 
-  // Mock data for the nested comment section: Represents a list of existing comments
+  // Mock data for the nested comment section
   final List<Map<String, String>> _comments = [
     {
       "user": "alex_dev",
@@ -46,12 +49,9 @@ class _PostCardState extends State<PostCard> {
   @override
   void initState() {
     super.initState();
-    // Regex logic: Extracts only the digits from the post's 'likes' string to enable math operations
     _likesCount = int.tryParse(widget.post.likes.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
   }
 
-  // Navigation Logic: Opens the image in a dedicated full-screen scaffold with zoom capabilities
-  // Uses InteractiveViewer to enable pinch-to-zoom functionality
   void _viewFullImage(BuildContext context, String imageUrl) {
     Navigator.push(
       context,
@@ -64,7 +64,7 @@ class _PostCardState extends State<PostCard> {
             elevation: 0,
           ),
           body: Center(
-            child: InteractiveViewer( // Allows users to pinch-to-zoom on the photo
+            child: InteractiveViewer(
               child: Image.network(
                 imageUrl,
                 fit: BoxFit.contain,
@@ -78,8 +78,6 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  // Toggles like state and updates the numerical counter locally
-  // Triggers a UI rebuild to reflect the new like count and icon color
   void _handleLikeToggle() {
     setState(() {
       _isLiked = !_isLiked;
@@ -87,27 +85,24 @@ class _PostCardState extends State<PostCard> {
     });
   }
 
-  // Local State Update: Inserts a new comment into the top of the list
-  // Clears the text field after successful submission
+  // --- FIXED: Uses dynamic user data instead of "You" and Unsplash ---
   void _addComment() {
     if (_commentController.text.isNotEmpty) {
       setState(() {
         _comments.insert(0, {
-          "user": "You",
+          "user": widget.currentUserName, // Dynamically set from your profile
           "comment": _commentController.text,
-          "pic": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
+          "pic": widget.currentUserProfilePic, // Dynamically set from your profile
         });
         _commentController.clear();
       });
     }
   }
 
-  // UI Helper: Builds the interactive comment section bottom sheet
-  // Uses DraggableScrollableSheet to allow the user to pull the comments up or down
   void _showComments(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Allows the sheet to move when the keyboard opens
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -120,7 +115,6 @@ class _PostCardState extends State<PostCard> {
             maxChildSize: 0.9,
             builder: (context, scrollController) => Column(
               children: [
-                // Top handle bar for the bottom sheet
                 Container(
                     margin: const EdgeInsets.symmetric(vertical: 10),
                     height: 5, width: 40,
@@ -128,7 +122,6 @@ class _PostCardState extends State<PostCard> {
                 ),
                 Text("${_comments.length} Comments", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const Divider(),
-                // List of comments that scrolls independently within the sheet
                 Expanded(
                   child: ListView.builder(
                     controller: scrollController,
@@ -143,12 +136,15 @@ class _PostCardState extends State<PostCard> {
                     },
                   ),
                 ),
-                // Comment Input Area: Positioned at the bottom, adjusted for keyboard height
+                // --- FIXED: Input section profile pic ---
                 Padding(
                   padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 10, left: 15, right: 15, top: 10),
                   child: Row(
                     children: [
-                      const CircleAvatar(radius: 18, backgroundImage: NetworkImage('https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150')),
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundImage: NetworkImage(widget.currentUserProfilePic), // FIXED
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: TextField(
@@ -159,7 +155,7 @@ class _PostCardState extends State<PostCard> {
                       TextButton(
                         onPressed: () {
                           _addComment();
-                          setModalState(() {}); // Forces the modal to refresh after adding a comment
+                          setModalState(() {});
                         },
                         child: const Text("Post", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
                       ),
@@ -174,7 +170,6 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  // Main build method: Orchestrates the high-level layout of the PostCard
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -183,7 +178,6 @@ class _PostCardState extends State<PostCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: Displays user info and the conditional Follow button
           ListTile(
             leading: CircleAvatar(backgroundImage: NetworkImage(widget.post.profileUrl)),
             title: Text(widget.post.username, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -204,9 +198,7 @@ class _PostCardState extends State<PostCard> {
                 : null,
           ),
 
-          // --- CONDITIONAL CONTENT: Determines layout based on whether post is an Image or News Link ---
           if (widget.post.type == PostType.image) ...[
-            // Rendering logic for standard image posts
             if (widget.post.mediaUrl != null)
               MouseRegion(
                 cursor: SystemMouseCursors.click,
@@ -228,7 +220,6 @@ class _PostCardState extends State<PostCard> {
               ),
             ),
           ] else ...[
-            // Rendering logic for News-style posts
             _buildNewsBox(),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -245,8 +236,6 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  // --- ACTIONS REMOVED SHARE BUTTON ---
-  // UI Helper: Builds the action buttons (Like, Comment, Save) for Image posts
   Widget _buildImageActions(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -260,7 +249,6 @@ class _PostCardState extends State<PostCard> {
             icon: const Icon(Icons.chat_bubble_outline, size: 26),
             onPressed: () => _showComments(context),
           ),
-          // SHARE BUTTON REMOVED per user request
           const Spacer(),
           IconButton(
             icon: Icon(
@@ -275,7 +263,6 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  // UI Helper: Builds the action row (Like and Comment) for News-style posts
   Widget _buildNewsActions(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -287,12 +274,10 @@ class _PostCardState extends State<PostCard> {
             _handleLikeToggle
         ),
         _actionBtn(Icons.chat_bubble_outline, "Comment", Colors.grey[700]!, () => _showComments(context)),
-        // SHARE BUTTON REMOVED per user request
       ],
     );
   }
 
-  // Button Template: Returns a stylized button with an icon and label for news actions
   Widget _actionBtn(IconData icon, String label, Color color, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
@@ -309,7 +294,6 @@ class _PostCardState extends State<PostCard> {
     );
   }
 
-  // UI Helper: Builds the stylized container for the News Link, including image and metadata
   Widget _buildNewsBox() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12),

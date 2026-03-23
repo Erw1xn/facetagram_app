@@ -1,191 +1,117 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-// --- NOTIFICATIONS SCREEN: Displays user activity like likes, comments, and follows ---
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
 
+  Future<void> deleteNotification(String docId) async {
+    await FirebaseFirestore.instance.collection('notifications').doc(docId).delete();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header Section: Large, bold title with custom padding and letter spacing
         const Padding(
           padding: EdgeInsets.fromLTRB(20, 25, 20, 15),
           child: Text(
             'Notifications',
-            style: TextStyle(
-              fontSize: 30, // Large heading size
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.8,
-            ),
+            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
           ),
         ),
 
-        // Scrollable List: Contains the categorized notification items
         Expanded(
-          child: ListView(
-            physics: const BouncingScrollPhysics(), // Provides the "stretch" effect on iOS/Android
-            children: [
-              _buildSectionTitle('New'), // Category header for recent alerts
-              _buildNotificationItem(
-                username: 'sarah_explore',
-                imageUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200',
-                action: 'liked your photo "Redwoods Magic!" 🌲✨',
-                time: '2h',
-                hasStory: true, // Triggers the colorful ring around the profile pic
-                trailing: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.network(
-                    'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=200',
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              _buildNotificationItem(
-                username: 'alex_j',
-                imageUrl: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=200',
-                action: 'commented: "Stunning light! 😍"',
-                time: '3h',
-              ),
+          child: StreamBuilder<QuerySnapshot>(
+            // FILTER: Ipakita lang ang notifications kung saan ang receiver ay IKAW
+            stream: FirebaseFirestore.instance
+                .collection('notifications')
+                .where('receiverId', isEqualTo: currentUserId)
+                .orderBy('timestamp', descending: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                // IMPORTANT: Kung may error dito, i-click ang link sa VS Code Debug Console
+                return const Center(child: Text("Error loading data. Check console for Index link."));
+              }
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-              _buildSectionTitle('Earlier'), // Category header for older alerts
-              _buildNotificationItem(
-                username: 'mike_r',
-                imageUrl: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=200',
-                action: 'mentioned you in a comment.',
-                time: '5h',
-              ),
-              _buildNotificationItem(
-                username: 'david_k',
-                imageUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200',
-                action: 'started following you.',
-                time: '1d',
-              ),
-              _buildNotificationItem(
-                username: 'clara_visions',
-                imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-                action: 'tagged you in a post from Yosemite.',
-                time: '2d',
-                trailing: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.network(
-                    'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=200',
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              _buildNotificationItem(
-                username: 'chloe_w',
-                imageUrl: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200',
-                action: 'saved your post "Redwoods Magic!"',
-                time: '3d',
-              ),
-              _buildNotificationItem(
-                username: 'mike_perez',
-                imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-                action: 'tagged you in a post from Japan.',
-                time: '2d',
-                trailing: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.network(
-                    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200',
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ],
+              final docs = snapshot.data!.docs;
+
+              if (docs.isEmpty) {
+                return const Center(child: Text("No notifications yet."));
+              }
+
+              return ListView.builder(
+                physics: const BouncingScrollPhysics(),
+                itemCount: docs.length,
+                itemBuilder: (context, index) {
+                  final docId = docs[index].id;
+                  final data = docs[index].data() as Map<String, dynamic>;
+
+                  return Dismissible(
+                    key: Key(docId),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Colors.red,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    onDismissed: (direction) => deleteNotification(docId),
+                    child: _buildNotificationItem(
+                      username: data['username'] ?? 'User',
+                      imageUrl: data['imageUrl'] ?? '',
+                      action: data['action'] ?? '',
+                      time: _formatTimestamp(data['timestamp']),
+                    ),
+                  );
+                },
+              );
+            },
           ),
         ),
       ],
     );
   }
 
-  // UI Helper: Builds the text labels for "New" and "Earlier" sections
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.black,
-        ),
-      ),
-    );
-  }
-
-  // UI Helper: Builds individual notification rows
   Widget _buildNotificationItem({
     required String username,
     required String imageUrl,
     required String action,
     required String time,
-    bool hasStory = false,
-    Widget? trailing,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-        // Leading: Profile picture with an optional gradient border (if hasStory is true)
-        leading: Container(
-          width: 62,
-          height: 62,
-          padding: const EdgeInsets.all(2.5),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: hasStory
-                ? const LinearGradient(
-              colors: [Color(0xFFf9ce34), Color(0xFFee2a7b), Color(0xFF6228d7)],
-              begin: Alignment.bottomLeft,
-              end: Alignment.topRight,
-            )
-                : null,
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(2),
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: CircleAvatar(
-              radius: 28,
-              backgroundImage: NetworkImage(imageUrl),
-            ),
-          ),
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+      leading: CircleAvatar(
+        radius: 28,
+        backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+        child: imageUrl.isEmpty ? const Icon(Icons.person) : null,
+      ),
+      title: RichText(
+        text: TextSpan(
+          style: const TextStyle(color: Colors.black, fontSize: 15),
+          children: [
+            TextSpan(text: username, style: const TextStyle(fontWeight: FontWeight.bold)),
+            TextSpan(text: ' $action '),
+            TextSpan(text: time, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          ],
         ),
-        // Title: Uses RichText to style the username differently from the action text
-        title: RichText(
-          text: TextSpan(
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 15.5,
-              height: 1.4,
-            ),
-            children: [
-              TextSpan(
-                text: username,
-                style: const TextStyle(fontWeight: FontWeight.w800), // Bold username
-              ),
-              const TextSpan(text: ' '),
-              TextSpan(text: action), // The activity description
-              const TextSpan(text: ' '),
-              TextSpan(
-                text: time,
-                style: TextStyle(color: Colors.grey.shade500, fontSize: 13.5), // Grey timestamp
-              ),
-            ],
-          ),
-        ),
-        // Trailing: Optional widget (usually a thumbnail of the post)
-        trailing: trailing,
-        onTap: () {}, // Placeholder for interaction logic
       ),
     );
+  }
+
+  String _formatTimestamp(Timestamp? timestamp) {
+    if (timestamp == null) return '';
+    DateTime date = timestamp.toDate();
+    Duration diff = DateTime.now().difference(date);
+    if (diff.inDays > 0) return '${diff.inDays}d';
+    if (diff.inHours > 0) return '${diff.inHours}h';
+    return '${diff.inMinutes}m';
   }
 }

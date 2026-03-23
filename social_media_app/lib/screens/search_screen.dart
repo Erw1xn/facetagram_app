@@ -69,17 +69,12 @@ class _SearchScreenState extends State<SearchScreen> {
           body: ListView(
             physics: const BouncingScrollPhysics(),
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text("Recent Searches", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ),
-              _RecentSearchesBar(users: otherUsers),
-
+              // --- ACCOUNTS TO EXPLORE SECTION ---
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 24, 16, 16),
                 child: Text("Accounts to Explore", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               ),
-              // Shows real users but with the toggle follow logic
+
               ...otherUsers.take(3).map((doc) {
                 final data = doc.data() as Map<String, dynamic>;
                 return _AccountTile(
@@ -90,6 +85,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 );
               }),
 
+              // --- POPULAR REELS AND POSTS SECTION ---
               const Padding(
                 padding: EdgeInsets.fromLTRB(16, 24, 16, 16),
                 child: Text("Popular Reels and Posts", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
@@ -103,7 +99,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// --- FOLLOW TOGGLE LOGIC RESTORED ---
 class _AccountTile extends StatefulWidget {
   final String userId;
   final String name;
@@ -118,35 +113,83 @@ class _AccountTile extends StatefulWidget {
 
 class _AccountTileState extends State<_AccountTile> {
   bool _isFollowing = false;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = _auth.currentUser;
+
     return ListTile(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: widget.userId))),
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => ProfileScreen(userId: widget.userId))),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: CircleAvatar(radius: 24, backgroundImage: NetworkImage(widget.imageUrl)),
-      title: Text(widget.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-      subtitle: Text(widget.username, style: const TextStyle(color: Colors.grey)),
+      leading: CircleAvatar(
+          radius: 24, backgroundImage: NetworkImage(widget.imageUrl)),
+      title: Text(widget.name,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+      subtitle:
+      Text(widget.username, style: const TextStyle(color: Colors.grey)),
       trailing: SizedBox(
         width: 110,
         height: 40,
         child: ElevatedButton(
-          onPressed: () => setState(() => _isFollowing = !_isFollowing),
+          onPressed: () async {
+            if (currentUser == null) return;
+
+            setState(() => _isFollowing = !_isFollowing);
+
+            try {
+              final myDocRef = FirebaseFirestore.instance.collection('users').doc(currentUser.uid);
+              final notificationRef = FirebaseFirestore.instance.collection('notifications');
+
+              final followingRef = myDocRef.collection('following').doc(widget.userId);
+              final followersRef = FirebaseFirestore.instance.collection('users').doc(widget.userId).collection('followers').doc(currentUser.uid);
+
+              if (_isFollowing) {
+                final myProfile = await myDocRef.get();
+                final String myName = myProfile.data()?['name'] ?? "User";
+                final String myPic = myProfile.data()?['profilePicUrl'] ?? widget.imageUrl;
+
+                await followingRef.set({'timestamp': FieldValue.serverTimestamp()});
+                await followersRef.set({'timestamp': FieldValue.serverTimestamp()});
+
+                await notificationRef.add({
+                  'action': 'started following you 👤',
+                  'hasStory': false,
+                  'imageUrl': myPic,
+                  'receiverId': widget.userId,
+                  'senderId': currentUser.uid,
+                  'timestamp': FieldValue.serverTimestamp(),
+                  'username': myName,
+                });
+              } else {
+                await followingRef.delete();
+                await followersRef.delete();
+              }
+            } catch (e) {
+              debugPrint("Error updating follow: $e");
+            }
+          },
           style: ElevatedButton.styleFrom(
             elevation: 0,
             backgroundColor: _isFollowing ? Colors.white : const Color(0xFF1890FF),
             foregroundColor: _isFollowing ? Colors.black : Colors.white,
-            side: _isFollowing ? const BorderSide(color: Colors.grey, width: 0.5) : BorderSide.none,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            side: _isFollowing
+                ? const BorderSide(color: Colors.grey, width: 0.5)
+                : BorderSide.none,
+            shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: Text(_isFollowing ? "Following" : "Follow", style: const TextStyle(fontWeight: FontWeight.w600)),
+          child: Text(_isFollowing ? "Following" : "Follow",
+              style: const TextStyle(fontWeight: FontWeight.w600)),
         ),
       ),
     );
   }
 }
 
-// --- POSTS GRID WITH IMAGE VIEWER RESTORED ---
 class _PostsGrid extends StatelessWidget {
   const _PostsGrid();
 
@@ -197,40 +240,6 @@ class _PostsGrid extends StatelessWidget {
   }
 }
 
-// --- RECENT SEARCHES BAR (RETAINS MOUSE POINTER) ---
-class _RecentSearchesBar extends StatelessWidget {
-  final List<DocumentSnapshot> users;
-  const _RecentSearchesBar({required this.users});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 115,
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        itemCount: users.length,
-        itemBuilder: (context, index) {
-          final data = users[index].data() as Map<String, dynamic>;
-          return MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: users[index].id))),
-              child: StoryItem(
-                name: data['name'] ?? 'User',
-                imageUrl: data['profilePicUrl'] ?? 'https://www.w3schools.com/howto/img_avatar.png',
-                isLive: false,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// --- PEOPLE SEARCH DELEGATE ---
 class PeopleSearchDelegate extends SearchDelegate {
   final List<DocumentSnapshot> allPeople;
   PeopleSearchDelegate({required this.allPeople});

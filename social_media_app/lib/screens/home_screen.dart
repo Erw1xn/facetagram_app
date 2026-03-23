@@ -82,6 +82,33 @@ class _HomeScreenState extends State<HomeScreen> {
 class _HomeFeedView extends StatelessWidget {
   const _HomeFeedView();
 
+  Post _generateRandomPost(int index) {
+    final List<String> randomNames = ["TechCrunch", "National Geographic", "Traveler_99", "Daily News", "Chef Gordon", "Art Gallery"];
+    final List<String> randomCaptions = [
+      "Check out this amazing view from my morning hike! 🏔️",
+      "Breaking: New technological advancement in AI is changing the world.",
+      "Just finished cooking the best pasta of my life. 🍝",
+      "Street photography in Tokyo is just different. 📸",
+      "Thinking about how much Flutter has improved over the years."
+    ];
+
+    bool isNews = index % 3 == 0;
+
+    return Post(
+      userId: "system_generated", // Placeholder ID for random posts
+      username: randomNames[index % randomNames.length],
+      handle: "@${randomNames[index % randomNames.length].toLowerCase().replaceAll(' ', '_')}",
+      profileUrl: "https://picsum.photos/id/${(index + 10) * 2}/200/200",
+      content: randomCaptions[index % randomCaptions.length],
+      mediaUrl: "https://picsum.photos/id/${index + 50}/800/600",
+      type: isNews ? PostType.news : PostType.image,
+      likes: "${(index + 1) * 12}",
+      comments: "${index + 5}",
+      newsTitle: isNews ? "The Future of Digital Connection" : null,
+      newsSubtext: isNews ? "Exploring how social platforms are evolving in 2026." : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -160,56 +187,54 @@ class _HomeFeedView extends StatelessWidget {
           final String? myUid = _auth.currentUser?.uid;
           final allDocs = snapshot.data!.docs;
 
-          // --- 1. EXTRACT YOUR OWN DATA FOR COMMENTS ---
-          // This looks for your own document in the collection to get your name and photo
           final myDoc = allDocs.firstWhere((doc) => doc.id == myUid);
           final myData = myDoc.data() as Map<String, dynamic>;
           final String myName = myData['name'] ?? 'User';
           final String myPic = myData['profilePicUrl'] ?? 'https://www.w3schools.com/howto/img_avatar.png';
 
-          // --- 2. FILTER FEED: Remove yourself from the post feed ---
           final feedUsers = allDocs.where((doc) => doc.id != myUid).toList();
 
           return ListView.builder(
             physics: const BouncingScrollPhysics(),
-            itemCount: feedUsers.length + 1,
+            itemCount: 1000,
             itemBuilder: (context, index) {
               if (index == 0) {
                 return _StoriesBar(allUsers: allDocs, currentUid: myUid);
               }
 
-              final userDoc = feedUsers[index - 1];
-              final userData = userDoc.data() as Map<String, dynamic>;
-              final String userId = userDoc.id;
+              int adjustedIndex = index - 1;
 
-              return MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProfileScreen(userId: userId),
-                      ),
-                    );
-                  },
+              if (adjustedIndex < feedUsers.length) {
+                final userDoc = feedUsers[adjustedIndex];
+                final userData = userDoc.data() as Map<String, dynamic>;
+                final String userId = userDoc.id;
+
+                return GestureDetector(
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId))),
                   child: PostCard(
-                    // --- FIXED: Pass the required user data to PostCard ---
                     currentUserName: myName,
                     currentUserProfilePic: myPic,
                     post: Post(
+                      userId: userId, // Pass the receiver's ID here
                       username: userData['name'] ?? 'User',
                       handle: userData['headline'] ?? '@user',
                       profileUrl: userData['profilePicUrl'] ?? 'https://www.w3schools.com/howto/img_avatar.png',
                       content: userData['bio'] ?? 'Hello! View my profile.',
                       mediaUrl: userData['coverPhotoUrl'] ?? 'https://picsum.photos/800/600',
                       type: PostType.image,
-                      likes: "0",
-                      comments: "0",
+                      likes: "24",
+                      comments: "3",
                     ),
                   ),
-                ),
-              );
+                );
+              } else {
+                final randomPost = _generateRandomPost(adjustedIndex);
+                return PostCard(
+                  currentUserName: myName,
+                  currentUserProfilePic: myPic,
+                  post: randomPost,
+                );
+              }
             },
           );
         },
@@ -245,40 +270,22 @@ class _StoriesBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: ListView(
         scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
         children: [
           if (myDoc != null)
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen())),
-                child: StoryItem(
-                  name: "Your Story",
-                  imageUrl: (myDoc.data() as Map<String, dynamic>)['profilePicUrl'] ?? defaultImg,
-                ),
-              ),
+            StoryItem(
+              name: "Your Story",
+              imageUrl: (myDoc.data() as Map<String, dynamic>)['profilePicUrl'] ?? defaultImg,
+              targetUserId: currentUid,
             ),
 
           ...otherUsers.map((userDoc) {
             final data = userDoc.data() as Map<String, dynamic>;
             final String otherUid = userDoc.id;
 
-            return MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProfileScreen(userId: otherUid),
-                    ),
-                  );
-                },
-                child: StoryItem(
-                  name: data['name'] ?? 'User',
-                  imageUrl: data['profilePicUrl'] ?? defaultImg,
-                ),
-              ),
+            return StoryItem(
+              name: data['name'] ?? 'User',
+              imageUrl: data['profilePicUrl'] ?? defaultImg,
+              targetUserId: otherUid,
             );
           }).toList(),
         ],

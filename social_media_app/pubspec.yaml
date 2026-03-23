@@ -57,6 +57,8 @@ dev_dependencies:
   flutter_native_splash: ^2.4.0   # Tool para sa splash screen
   flutter_lints: ^6.0.0           # Code style & warnings
 
+  web: ^1.1.1
+
 # The "flutter_lints" package below contains a set of recommended lints to
 # encourage good coding practices. The lint set provided by the package is
 # activated in the `analysis_options.yaml` file located at the root of your

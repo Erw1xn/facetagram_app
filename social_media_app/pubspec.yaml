@@ -33,6 +33,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  share_plus: ^12.0.1 # O ang latest version
+
+  url_launcher: ^6.3.0 # para maging clickable ang link
+
   # --- SMOOTH ANIMATION PACKAGE ---
   flutter_animate: ^4.5.0
 

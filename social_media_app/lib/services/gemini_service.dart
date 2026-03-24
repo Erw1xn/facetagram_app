@@ -4,7 +4,7 @@ import '../models/chat_message.dart';
 
 class GeminiService {
   // 🔑 API KEY AND ENDPOINT: These are your credentials and the "address" of the Gemini server.
-  static const String apiKey = 'AIzaSyANE0Ri2i-Q_9lQs9j7ubhZEuVHUGh3y3w';
+  static const String apiKey = '';
   static const String apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
   // 🔄 MESSAGE FORMATTER: This function converts your app's ChatMessage list into the

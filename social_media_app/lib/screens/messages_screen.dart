@@ -4,7 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_detail_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
-  const MessagesScreen({super.key});
+  final String? sharedMediaUrl; // Dagdagan ito
+  const MessagesScreen({super.key, this.sharedMediaUrl}); // I-update ang constructor
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
@@ -152,12 +153,37 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          onTap: () => Navigator.push(context, MaterialPageRoute(
-              builder: (context) => ChatDetailScreen(name: name, profileImg: img, receiverId: receiverId))),
-          leading: CircleAvatar(radius: 30, backgroundImage: NetworkImage(img)),
-          title: Text(name, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
-          subtitle: Text(lastMsg, maxLines: 1, overflow: TextOverflow.ellipsis),
-          trailing: Text(time, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatDetailScreen(
+                  name: name,
+                  profileImg: img,
+                  receiverId: receiverId,
+                  // Make sure 'widget.sharedMediaUrl' is available in your State class
+                  sharedMediaUrl: widget.sharedMediaUrl,
+                ),
+              ),
+            );
+          },
+          leading: CircleAvatar(
+            radius: 30,
+            backgroundImage: NetworkImage(img),
+          ),
+          title: Text(
+            name,
+            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+          ),
+          subtitle: Text(
+            lastMsg,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: Text(
+            time,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
         );
       },
     );

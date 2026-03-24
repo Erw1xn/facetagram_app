@@ -5,13 +5,13 @@ import 'chat_bot_screen.dart';
 import '../widgets/post_card.dart';
 import '../models/post_model.dart';
 import '../widgets/story_item.dart';
-import 'reels_screen.dart';
 import 'search_screen.dart';
 import 'marketplace_screen.dart';
 import 'messages_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'login_screen.dart';
+import 'create_post_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,12 +25,12 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // FIXED: The list now matches the BottomNavigationBar items (Total 4 functional pages)
   final List<Widget> _pages = [
-    const _HomeFeedView(),
-    const SearchScreen(),
-    const ReelsScreen(),
-    const NotificationsScreen(),
-    const ProfileScreen(),
+    const _HomeFeedView(),       // Index 0
+    const SearchScreen(),        // Index 1
+    const NotificationsScreen(), // Index 3 (Index 2 is skipped by the dummy button)
+    const ProfileScreen(),       // Index 4
   ];
 
   @override
@@ -46,10 +46,46 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         return Scaffold(
-          body: IndexedStack(index: _currentIndex, children: _pages),
+          // Use a logic check for IndexedStack because index 2 in the bar is empty
+          body: IndexedStack(
+            index: _currentIndex > 2 ? _currentIndex - 1 : _currentIndex,
+            children: _pages,
+          ),
+
+          floatingActionButton: Container(
+            height: 65,
+            width: 65,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [Color(0xFF1877F2), Color(0xFF833AB4), Color(0xFFF77737)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+            ),
+            child: FloatingActionButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CreatePostScreen()),
+                );
+              },
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.add, size: 35, color: Colors.white),
+            ),
+          ),
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
           bottomNavigationBar: BottomNavigationBar(
             currentIndex: _currentIndex,
-            onTap: (index) => setState(() => _currentIndex = index),
+            onTap: (index) {
+              if (index != 2) {
+                setState(() => _currentIndex = index);
+              }
+            },
             type: BottomNavigationBarType.fixed,
             showSelectedLabels: false,
             showUnselectedLabels: false,
@@ -59,15 +95,15 @@ class _HomeScreenState extends State<HomeScreen> {
             items: [
               const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
               const BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-              const BottomNavigationBarItem(icon: Icon(Icons.video_library_outlined), label: 'Reels'),
+
+              // Index 2: This is the space for the Floating Action Button
+              const BottomNavigationBarItem(icon: Icon(Icons.add, color: Colors.transparent), label: ''),
+
               const BottomNavigationBarItem(icon: Icon(Icons.notifications_none), label: 'Notifications'),
               BottomNavigationBarItem(
-                icon: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: CircleAvatar(
-                    radius: 12,
-                    backgroundImage: NetworkImage(userImageUrl),
-                  ),
+                icon: CircleAvatar(
+                  radius: 12,
+                  backgroundImage: NetworkImage(userImageUrl),
                 ),
                 label: 'Profile',
               ),
@@ -79,41 +115,78 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _HomeFeedView extends StatelessWidget {
+class _HomeFeedView extends StatefulWidget {
   const _HomeFeedView();
 
+  @override
+  State<_HomeFeedView> createState() => _HomeFeedViewState();
+}
+
+class _HomeFeedViewState extends State<_HomeFeedView> {
+  int _itemCount = 15;
+  final ScrollController _scrollController = ScrollController();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        setState(() {
+          _itemCount += 10;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   Post _generateRandomPost(int index) {
-    final List<String> randomNames = ["TechCrunch", "National Geographic", "Traveler_99", "Daily News", "Chef Gordon", "Art Gallery"];
-    final List<String> randomCaptions = [
-      "Check out this amazing view from my morning hike! 🏔️",
-      "Breaking: New technological advancement in AI is changing the world.",
-      "Just finished cooking the best pasta of my life. 🍝",
-      "Street photography in Tokyo is just different. 📸",
-      "Thinking about how much Flutter has improved over the years."
+    final List<String> videoUrls = [
+      "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
+      "https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4",
+      "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+      "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
     ];
 
-    bool isNews = index % 3 == 0;
+    final List<String> randomNames = ["TechGuru", "NatureLover", "TravelBug", "ChefDaily", "ArtInspo"];
+
+    PostType contentType;
+    if (index % 3 == 0) {
+      contentType = PostType.news;
+    } else if (index % 2 == 0) {
+      contentType = PostType.video;
+    } else {
+      contentType = PostType.image;
+    }
+
+    String name = randomNames[index % randomNames.length];
 
     return Post(
-      userId: "system_generated", // Placeholder ID for random posts
-      username: randomNames[index % randomNames.length],
-      handle: "@${randomNames[index % randomNames.length].toLowerCase().replaceAll(' ', '_')}",
-      profileUrl: "https://picsum.photos/id/${(index + 10) * 2}/200/200",
-      content: randomCaptions[index % randomCaptions.length],
-      mediaUrl: "https://picsum.photos/id/${index + 50}/800/600",
-      type: isNews ? PostType.news : PostType.image,
-      likes: "${(index + 1) * 12}",
-      comments: "${index + 5}",
-      newsTitle: isNews ? "The Future of Digital Connection" : null,
-      newsSubtext: isNews ? "Exploring how social platforms are evolving in 2026." : null,
+      userId: "random_$index",
+      username: name,
+      handle: "@${name.toLowerCase()}",
+      profileUrl: "https://api.dicebear.com/7.x/avataaars/png?seed=$name$index",
+      content: "This update is looking clean! Infinite scrolling is active. 🚀",
+      mediaUrl: contentType == PostType.video
+          ? videoUrls[index % videoUrls.length]
+          : "https://picsum.photos/seed/$index/800/600",
+      type: contentType,
+      likes: "${(index + 1) * 10}",
+      comments: "${index + 1}",
+      newsTitle: contentType == PostType.news ? "The Future of FaceTagram" : null,
+      newsSubtext: contentType == PostType.news ? "How we integrated Facebook and Instagram UIs." : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final FirebaseAuth _auth = FirebaseAuth.instance;
-    final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -152,6 +225,7 @@ class _HomeFeedView extends StatelessWidget {
           ),
           IconButton(
             onPressed: () {
+              _auth.signOut();
               Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -180,61 +254,64 @@ class _HomeFeedView extends StatelessWidget {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: StreamBuilder<QuerySnapshot>(
-        stream: _firestore.collection('users').snapshots(),
+        stream: _firestore.collection('posts').orderBy('timestamp', descending: true).snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          // 1. Dito natin ilalagay ang lahat ng posts na ipapakita
+          List<Post> allPostsToShow = [];
 
-          final String? myUid = _auth.currentUser?.uid;
-          final allDocs = snapshot.data!.docs;
+          // 2. Kunin ang REAL posts mula sa Firestore kung may data na
+          if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+            allPostsToShow = snapshot.data!.docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return Post(
+                userId: data['userId'] ?? '',
+                username: data['username'] ?? 'Anonymous',
+                handle: "@${(data['username'] ?? 'user').toString().toLowerCase().replaceAll(' ', '')}",
+                profileUrl: data['profileUrl'] ?? 'https://www.w3schools.com/howto/img_avatar.png',
+                content: data['content'] ?? '',
+                mediaUrl: data['mediaUrl'],
+                type: PostType.values[data['type'] ?? 0],
+                likes: data['likes']?.toString() ?? "0",
+                comments: "0",
+              );
+            }).toList();
+          }
 
-          final myDoc = allDocs.firstWhere((doc) => doc.id == myUid);
-          final myData = myDoc.data() as Map<String, dynamic>;
-          final String myName = myData['name'] ?? 'User';
-          final String myPic = myData['profilePicUrl'] ?? 'https://www.w3schools.com/howto/img_avatar.png';
+          // 3. ISAMA ang mga Random Posts (Dummy) sa dulo ng listahan
+          // Pwede mong dagdagan kung ilan ang gusto mong dummy posts
+          for (int i = 0; i < 10; i++) {
+            allPostsToShow.add(_generateRandomPost(i));
+          }
 
-          final feedUsers = allDocs.where((doc) => doc.id != myUid).toList();
+          return StreamBuilder<QuerySnapshot>(
+            stream: _firestore.collection('users').snapshots(),
+            builder: (context, userSnapshot) {
+              if (!userSnapshot.hasData) return const Center(child: CircularProgressIndicator());
 
-          return ListView.builder(
-            physics: const BouncingScrollPhysics(),
-            itemCount: 1000,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return _StoriesBar(allUsers: allDocs, currentUid: myUid);
-              }
+              final allUsers = userSnapshot.data!.docs;
+              final myUid = _auth.currentUser?.uid;
 
-              int adjustedIndex = index - 1;
+              return ListView.builder(
+                controller: _scrollController,
+                physics: const BouncingScrollPhysics(),
+                // Gagamitin natin ang length ng pinagsamang listahan (+1 para sa stories)
+                itemCount: allPostsToShow.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return _StoriesBar(allUsers: allUsers, currentUid: myUid);
+                  }
 
-              if (adjustedIndex < feedUsers.length) {
-                final userDoc = feedUsers[adjustedIndex];
-                final userData = userDoc.data() as Map<String, dynamic>;
-                final String userId = userDoc.id;
+                  // Kunin ang post mula sa pinagsamang listahan
+                  final post = allPostsToShow[index - 1];
 
-                return GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(userId: userId))),
-                  child: PostCard(
-                    currentUserName: myName,
-                    currentUserProfilePic: myPic,
-                    post: Post(
-                      userId: userId, // Pass the receiver's ID here
-                      username: userData['name'] ?? 'User',
-                      handle: userData['headline'] ?? '@user',
-                      profileUrl: userData['profilePicUrl'] ?? 'https://www.w3schools.com/howto/img_avatar.png',
-                      content: userData['bio'] ?? 'Hello! View my profile.',
-                      mediaUrl: userData['coverPhotoUrl'] ?? 'https://picsum.photos/800/600',
-                      type: PostType.image,
-                      likes: "24",
-                      comments: "3",
-                    ),
-                  ),
-                );
-              } else {
-                final randomPost = _generateRandomPost(adjustedIndex);
-                return PostCard(
-                  currentUserName: myName,
-                  currentUserProfilePic: myPic,
-                  post: randomPost,
-                );
-              }
+                  return PostCard(
+                    // default values muna habang kinukuha ang user info
+                    currentUserName: "User",
+                    currentUserProfilePic: 'https://www.w3schools.com/howto/img_avatar.png',
+                    post: post,
+                  );
+                },
+              );
             },
           );
         },
@@ -277,15 +354,12 @@ class _StoriesBar extends StatelessWidget {
               imageUrl: (myDoc.data() as Map<String, dynamic>)['profilePicUrl'] ?? defaultImg,
               targetUserId: currentUid,
             ),
-
           ...otherUsers.map((userDoc) {
             final data = userDoc.data() as Map<String, dynamic>;
-            final String otherUid = userDoc.id;
-
             return StoryItem(
               name: data['name'] ?? 'User',
               imageUrl: data['profilePicUrl'] ?? defaultImg,
-              targetUserId: otherUid,
+              targetUserId: userDoc.id,
             );
           }).toList(),
         ],

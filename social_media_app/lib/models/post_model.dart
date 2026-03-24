@@ -1,7 +1,7 @@
-enum PostType { image, news }
+enum PostType { image, news, video }
 
 class Post {
-  final String? userId; // The ID of the person who created the post
+  final String? userId; // Make sure this is here!
   final String username;
   final String handle;
   final String profileUrl;
@@ -14,7 +14,7 @@ class Post {
   final String? newsSubtext;
 
   Post({
-    this.userId, // Add this
+    this.userId,
     required this.username,
     required this.handle,
     required this.profileUrl,
